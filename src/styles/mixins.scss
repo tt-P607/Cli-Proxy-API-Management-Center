@@ -17,6 +17,13 @@
   }
 }
 
+// Desktop breakpoint: wider than tablet
+@mixin desktop {
+  @media (min-width: #{$breakpoint-tablet + 1}) {
+    @content;
+  }
+}
+
 // 文本截断
 @mixin text-ellipsis {
   overflow: hidden;
