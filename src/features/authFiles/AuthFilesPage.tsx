@@ -181,27 +181,6 @@ export function AuthFilesPage() {
 
   const disableControls = connectionStatus !== 'connected';
   const { refreshQuota: refreshCredentialQuota } = useQuotaActions(disableControls);
-  const [refreshAllQuotaLoading, setRefreshAllQuotaLoading] = useState(false);
-  const handleRefreshAllQuota = useCallback(async () => {
-    const targets = files
-      .filter((file) => !isRuntimeOnlyAuthFile(file))
-      .map((file) => {
-        const type = resolveAuthProvider(file);
-        if (!QUOTA_PROVIDER_TYPES.has(type as QuotaProviderType)) return null;
-        return { file, adapter: QUOTA_ADAPTERS[type as QuotaProviderType] };
-      })
-      .filter(
-        (entry): entry is { file: (typeof files)[number]; adapter: QuotaAdapter } =>
-          entry !== null
-      );
-    if (targets.length === 0) return;
-    setRefreshAllQuotaLoading(true);
-    try {
-      await Promise.all(targets.map((t) => refreshCredentialQuota(t.file, t.adapter)));
-    } finally {
-      setRefreshAllQuotaLoading(false);
-    }
-  }, [files, refreshCredentialQuota]);
   const normalizedFilter = normalizeProviderKey(String(filter));
   const quotaFilterType: QuotaProviderType | null = QUOTA_PROVIDER_TYPES.has(
     normalizedFilter as QuotaProviderType
@@ -463,6 +442,28 @@ export function AuthFilesPage() {
     [filesMatchingStatusFilters, normalizedFilter, normalizedSearch, wildcardSearch]
   );
 
+  const [refreshAllQuotaLoading, setRefreshAllQuotaLoading] = useState(false);
+  const handleRefreshAllQuota = useCallback(async () => {
+    const targets = filtered
+      .filter((file) => !isRuntimeOnlyAuthFile(file))
+      .map((file) => {
+        const type = resolveAuthProvider(file);
+        if (!QUOTA_PROVIDER_TYPES.has(type as QuotaProviderType)) return null;
+        return { file, adapter: QUOTA_ADAPTERS[type as QuotaProviderType] };
+      })
+      .filter(
+        (entry): entry is { file: (typeof filtered)[number]; adapter: QuotaAdapter } =>
+          entry !== null
+      );
+    if (targets.length === 0) return;
+    setRefreshAllQuotaLoading(true);
+    try {
+      await Promise.all(targets.map((t) => refreshCredentialQuota(t.file, t.adapter)));
+    } finally {
+      setRefreshAllQuotaLoading(false);
+    }
+  }, [filtered, refreshCredentialQuota]);
+
   const sorted = useMemo(() => sortAuthFiles(filtered, sortMode), [filtered, sortMode]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -649,7 +650,7 @@ export function AuthFilesPage() {
           deleteDisabled={disableControls || loading || deletingAll || files.length === 0}
           deleteLoading={deletingAll}
           refreshAllQuotaLabel={t('auth_files.refresh_all_quota_label')}
-          refreshAllQuotaDisabled={disableControls || loading || files.length === 0}
+          refreshAllQuotaDisabled={disableControls || loading || filtered.length === 0}
           refreshAllQuotaLoading={refreshAllQuotaLoading}
           onRefreshAllQuota={() => void handleRefreshAllQuota()}
           onDelete={() =>
