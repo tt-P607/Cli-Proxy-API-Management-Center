@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { authFilesApi, type AuthFileTestResult } from '@/services/api';
 import { useNotificationStore } from '@/stores';
@@ -57,8 +58,41 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
 
   // 测试请求本地状态
   const [testModel, setTestModel] = useState('');
+  const [testModelsLoading, setTestModelsLoading] = useState(false);
+  const [testModelOptions, setTestModelOptions] = useState<string[]>([]);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<AuthFileTestResult | null>(null);
+
+  // 打开抽屉时加载该凭证支持的模型列表（供测试模型下拉选择）
+  const activeFileName = editor?.fileName;
+  useEffect(() => {
+    if (!activeFileName) return;
+    let cancelled = false;
+    setTestModelsLoading(true);
+    setTestModel('');
+    setTestResult(null);
+    setTestModelOptions([]);
+    void authFilesApi
+      .getModelsForAuthFile(activeFileName)
+      .then((models) => {
+        if (cancelled) return;
+        const ids = (models ?? [])
+          .map((m) => m?.id)
+          .filter((id): id is string => Boolean(id && id.trim()))
+          .map((id) => id.trim());
+        setTestModelOptions(ids);
+        if (ids.length > 0) setTestModel(ids[0]);
+      })
+      .catch(() => {
+        if (!cancelled) setTestModelOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTestModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFileName]);
 
   const confirmClose = useCallback((): boolean | Promise<boolean> => {
     if (!dirty || editor?.saving === true) return true;
@@ -342,12 +376,17 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                     </div>
                     <div className={styles.testForm}>
                       <div className={styles.testModelInput}>
-                        <Input
-                          label={t('auth_files.test_model_label')}
+                        <Select
                           value={testModel}
+                          options={[
+                            { value: '', label: t('auth_files.test_default_model') },
+                            ...testModelOptions.map((id) => ({ value: id, label: id })),
+                          ]}
+                          onChange={setTestModel}
                           placeholder={t('auth_files.test_model_placeholder')}
-                          disabled={testing || disableControls}
-                          onChange={(e) => setTestModel(e.target.value)}
+                          disabled={testing || testModelsLoading || disableControls}
+                          ariaLabel={t('auth_files.test_model_label')}
+                          fullWidth
                         />
                       </div>
                       <Button
