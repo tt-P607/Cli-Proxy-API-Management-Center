@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
-import { IconSearch, IconSlidersHorizontal, IconTrash2 } from '@/components/ui/icons';
+import { IconRefreshCw, IconSearch, IconSlidersHorizontal, IconTrash2 } from '@/components/ui/icons';
 import {
   MAX_CARD_PAGE_SIZE,
   MIN_CARD_PAGE_SIZE,
@@ -33,6 +33,10 @@ export type AuthFilesToolbarProps = {
   deleteDisabled: boolean;
   deleteLoading: boolean;
   onDelete: () => void;
+  refreshAllQuotaLabel: string;
+  refreshAllQuotaDisabled: boolean;
+  refreshAllQuotaLoading: boolean;
+  onRefreshAllQuota: () => void;
 };
 
 /**
@@ -58,6 +62,10 @@ export function AuthFilesToolbar(props: AuthFilesToolbarProps) {
     deleteDisabled,
     deleteLoading,
     onDelete,
+    refreshAllQuotaLabel,
+    refreshAllQuotaDisabled,
+    refreshAllQuotaLoading,
+    onRefreshAllQuota,
   } = props;
   const { t } = useTranslation();
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
@@ -176,6 +184,17 @@ export function AuthFilesToolbar(props: AuthFilesToolbarProps) {
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        className={styles.refreshAllQuotaAction}
+        onClick={onRefreshAllQuota}
+        disabled={refreshAllQuotaDisabled}
+        title={t('auth_files.refresh_all_quota_label')}
+      >
+        {refreshAllQuotaLoading ? <LoadingSpinner size={13} /> : <IconRefreshCw size={14} />}
+        {refreshAllQuotaLabel}
+      </button>
 
       <button
         type="button"

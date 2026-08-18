@@ -34,6 +34,7 @@ type AuthFileEditorErrorKey = AuthFileHeadersErrorKey | AuthFileWeightErrorKey;
 export type PrefixProxyEditorField =
   | 'prefix'
   | 'proxyUrl'
+  | 'projectId'
   | 'priority'
   | 'weight'
   | 'disableCooling'
@@ -58,6 +59,8 @@ export type PrefixProxyEditorState = {
   providerKey: string;
   prefix: string;
   proxyUrl: string;
+  projectId: string;
+  projectIdTouched: boolean;
   priority: string;
   weight: string;
   weightError: string | null;
@@ -282,6 +285,14 @@ export const buildAuthFileFieldsPatch = (
     patch.prefix = nextPrefix;
   }
 
+  if (editor.projectIdTouched) {
+    const originalProjectId = normalizeTextField(original.project_id ?? original.projectId);
+    const nextProjectId = editor.projectId.trim();
+    if (nextProjectId !== originalProjectId) {
+      patch.project_id = nextProjectId;
+    }
+  }
+
   const originalProxyURL = normalizeTextField(original.proxy_url);
   const nextProxyURL = editor.proxyUrl.trim();
   if (nextProxyURL !== originalProxyURL) {
@@ -385,6 +396,15 @@ const buildPrefixProxyUpdatedText = (
   if (!editor?.json) return editor?.rawText ?? '';
   const patch = buildAuthFileFieldsPatch(editor, resolveError);
   let next: Record<string, unknown> = { ...editor.json };
+  if (patch.project_id !== undefined) {
+    if (patch.project_id) {
+      next.project_id = patch.project_id;
+    } else {
+      delete next.project_id;
+      delete next.projectId;
+    }
+  }
+
   if (patch.prefix !== undefined) {
     if (patch.prefix) {
       next.prefix = patch.prefix;
@@ -503,6 +523,8 @@ export function useAuthFilesPrefixProxyEditor(
       providerKey: fileProviderKey,
       prefix: '',
       proxyUrl: '',
+      projectId: '',
+      projectIdTouched: false,
       priority: '',
       weight: '',
       weightError: null,
@@ -557,6 +579,12 @@ export function useAuthFilesPrefixProxyEditor(
       );
       const prefix = typeof json.prefix === 'string' ? json.prefix : '';
       const proxyUrl = typeof json.proxy_url === 'string' ? json.proxy_url : '';
+      const projectId =
+        typeof json.project_id === 'string'
+          ? json.project_id
+          : typeof json.projectId === 'string'
+            ? json.projectId
+            : '';
       const priority = parsePriorityValue(json.priority);
       const weight = readCredentialWeight(json.weight);
       const disableCooling = readAuthFileDisableCooling(json);
@@ -587,6 +615,8 @@ export function useAuthFilesPrefixProxyEditor(
           providerKey,
           prefix,
           proxyUrl,
+          projectId,
+          projectIdTouched: false,
           priority: priority !== undefined ? String(priority) : '',
           weight: weight !== undefined ? String(weight) : '',
           weightError: null,
@@ -624,6 +654,7 @@ export function useAuthFilesPrefixProxyEditor(
       if (!prev) return prev;
       if (field === 'prefix') return { ...prev, prefix: String(value) };
       if (field === 'proxyUrl') return { ...prev, proxyUrl: String(value) };
+      if (field === 'projectId') return { ...prev, projectId: String(value), projectIdTouched: true };
       if (field === 'priority') return { ...prev, priority: String(value) };
       if (field === 'weight') {
         const weight = String(value);

@@ -1,10 +1,11 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Input } from '@/components/ui/Input';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
+import { authFilesApi, type AuthFileTestResult } from '@/services/api';
 import { useNotificationStore } from '@/stores';
 import type {
   PrefixProxyEditorField,
@@ -52,6 +53,12 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
   const { disableControls, editor, updatedText, dirty, onClose, onCopyText, onSave, onChange } =
     props;
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
+  const showNotification = useNotificationStore((state) => state.showNotification);
+
+  // 测试请求本地状态
+  const [testModel, setTestModel] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<AuthFileTestResult | null>(null);
 
   const confirmClose = useCallback((): boolean | Promise<boolean> => {
     if (!dirty || editor?.saving === true) return true;
@@ -70,7 +77,10 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
 
   const handleCancelClick = useCallback(() => {
     void Promise.resolve(confirmClose()).then((ok) => {
-      if (ok) onClose();
+      if (ok) {
+        setTestResult(null);
+        onClose();
+      }
     });
   }, [confirmClose, onClose]);
 
@@ -102,10 +112,55 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
     return fileInfoText;
   }, [fileInfoText]);
 
+  const handleTestCredential = useCallback(async () => {
+    if (!editor?.fileName || testing) return;
+    setTesting(true);
+    try {
+      const res = await authFilesApi.testCredential(editor.fileName, testModel.trim() || undefined);
+      setTestResult(res);
+      if (res.status_code === 200) {
+        showNotification(t('auth_files.test_result_success'), 'success');
+      } else {
+        showNotification(
+          `${t('auth_files.test_result_failed')}: ${res.error ?? res.message}`,
+          'error'
+        );
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setTestResult({
+        status_code: 0,
+        error: errMsg,
+        message: t('auth_files.test_result_failed'),
+      });
+      showNotification(`${t('auth_files.test_result_failed')}: ${errMsg}`, 'error');
+    } finally {
+      setTesting(false);
+    }
+  }, [editor?.fileName, showNotification, t, testModel, testing]);
+
+  const formattedTestResponse = useMemo(() => {
+    if (!testResult) return '';
+    if (testResult.response) {
+      try {
+        return JSON.stringify(JSON.parse(testResult.response), null, 2);
+      } catch {
+        return testResult.response;
+      }
+    }
+    if (testResult.error) {
+      return testResult.error;
+    }
+    return testResult.message ?? '';
+  }, [testResult]);
+
   return (
     <Sheet
       open={Boolean(editor)}
-      onClose={onClose}
+      onClose={() => {
+        setTestResult(null);
+        onClose();
+      }}
       confirmClose={confirmClose}
       size="md"
       closeDisabled={editor?.saving === true}
@@ -189,6 +244,14 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                     onChange={(e) => onChange('proxyUrl', e.target.value)}
                   />
                   <Input
+                    label={t('auth_files.project_id_label')}
+                    value={editor.projectId}
+                    placeholder={t('auth_files.project_id_placeholder')}
+                    hint={t('auth_files.project_id_hint')}
+                    disabled={disableControls || editor.saving || !editor.json}
+                    onChange={(e) => onChange('projectId', e.target.value)}
+                  />
+                  <Input
                     label={t('auth_files.priority_label')}
                     value={editor.priority}
                     placeholder={t('auth_files.priority_placeholder')}
@@ -270,6 +333,76 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                     disabled={disableControls || editor.saving || !editor.json}
                     onChange={(e) => onChange('note', e.target.value)}
                   />
+
+                  {/* 凭证测试请求与响应详情 */}
+                  <section className={styles.testSection}>
+                    <div className={styles.testHeader}>
+                      <span className={styles.testTitle}>{t('auth_files.test_section_title')}</span>
+                      <span className={styles.testDesc}>{t('auth_files.test_section_desc')}</span>
+                    </div>
+                    <div className={styles.testForm}>
+                      <div className={styles.testModelInput}>
+                        <Input
+                          label={t('auth_files.test_model_label')}
+                          value={testModel}
+                          placeholder={t('auth_files.test_model_placeholder')}
+                          disabled={testing || disableControls}
+                          onChange={(e) => setTestModel(e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleTestCredential()}
+                        loading={testing}
+                        disabled={testing || disableControls}
+                      >
+                        {testing ? t('auth_files.test_running') : t('auth_files.test_button')}
+                      </Button>
+                    </div>
+
+                    {testResult && (
+                      <div className={styles.testResultCard}>
+                        <div className={styles.testResultMeta}>
+                          <div className={styles.testMetaLeft}>
+                            <span
+                              className={
+                                testResult.status_code === 200
+                                  ? styles.testBadgeSuccess
+                                  : styles.testBadgeError
+                              }
+                            >
+                              {testResult.status_code === 200
+                                ? `200 OK (${t('auth_files.test_result_success')})`
+                                : `${testResult.status_code || 'Error'} (${t('auth_files.test_result_failed')})`}
+                            </span>
+                            {testResult.latency_ms !== undefined && (
+                              <span className={styles.testLatency}>
+                                {t('auth_files.test_latency')}: {testResult.latency_ms}ms
+                              </span>
+                            )}
+                            {testResult.model && (
+                              <span className={styles.testLatency}>
+                                ({testResult.model})
+                              </span>
+                            )}
+                          </div>
+                          {formattedTestResponse && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                void onCopyText(formattedTestResponse);
+                                showNotification(t('auth_files.test_response_copied'), 'success');
+                              }}
+                            >
+                              {t('auth_files.test_copy_response')}
+                            </Button>
+                          )}
+                        </div>
+                        <pre className={styles.testResponsePre}>{formattedTestResponse}</pre>
+                      </div>
+                    )}
+                  </section>
                 </div>
               )}
             </>

@@ -51,6 +51,9 @@ import {
   type AuthFilesSortMode,
 } from '@/features/authFiles/uiState';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import { resolveAuthProvider } from '@/utils/quota';
+import { QUOTA_ADAPTERS, type QuotaAdapter } from '@/features/quota/providers';
+import { useQuotaActions } from '@/features/quota/hooks/useQuotaActions';
 import styles from './AuthFilesPage.module.scss';
 
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
@@ -177,6 +180,28 @@ export function AuthFilesPage() {
   });
 
   const disableControls = connectionStatus !== 'connected';
+  const { refreshQuota: refreshCredentialQuota } = useQuotaActions(disableControls);
+  const [refreshAllQuotaLoading, setRefreshAllQuotaLoading] = useState(false);
+  const handleRefreshAllQuota = useCallback(async () => {
+    const targets = files
+      .filter((file) => !isRuntimeOnlyAuthFile(file))
+      .map((file) => {
+        const type = resolveAuthProvider(file);
+        if (!QUOTA_PROVIDER_TYPES.has(type as QuotaProviderType)) return null;
+        return { file, adapter: QUOTA_ADAPTERS[type as QuotaProviderType] };
+      })
+      .filter(
+        (entry): entry is { file: (typeof files)[number]; adapter: QuotaAdapter } =>
+          entry !== null
+      );
+    if (targets.length === 0) return;
+    setRefreshAllQuotaLoading(true);
+    try {
+      await Promise.all(targets.map((t) => refreshCredentialQuota(t.file, t.adapter)));
+    } finally {
+      setRefreshAllQuotaLoading(false);
+    }
+  }, [files, refreshCredentialQuota]);
   const normalizedFilter = normalizeProviderKey(String(filter));
   const quotaFilterType: QuotaProviderType | null = QUOTA_PROVIDER_TYPES.has(
     normalizedFilter as QuotaProviderType
@@ -623,6 +648,10 @@ export function AuthFilesPage() {
           deleteLabel={deleteAllButtonLabel}
           deleteDisabled={disableControls || loading || deletingAll || files.length === 0}
           deleteLoading={deletingAll}
+          refreshAllQuotaLabel={t('auth_files.refresh_all_quota_label')}
+          refreshAllQuotaDisabled={disableControls || loading || files.length === 0}
+          refreshAllQuotaLoading={refreshAllQuotaLoading}
+          onRefreshAllQuota={() => void handleRefreshAllQuota()}
           onDelete={() =>
             handleDeleteAll({
               filter,

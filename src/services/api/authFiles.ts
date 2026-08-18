@@ -16,9 +16,20 @@ import { parseTimestampMs } from '@/utils/timestamp';
 type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean };
 type AuthFileEntry = AuthFilesResponse['files'][number];
+
+export type AuthFileTestResult = {
+  status_code: number;
+  latency_ms?: number;
+  model?: string;
+  message?: string;
+  response?: string;
+  error?: string;
+};
+
 export type AuthFileFieldsPatch = {
   prefix?: string;
   proxy_url?: string;
+  project_id?: string;
   headers?: Record<string, string>;
   priority?: number;
   weight?: number | null;
@@ -31,6 +42,7 @@ export type AuthFileFieldsPatch = {
   'excluded-models'?: string[];
   expired?: string;
 };
+
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
   status?: string;
@@ -108,8 +120,6 @@ const normalizeBatchUploadResponse = (
 ): AuthFileBatchUploadResult => {
   const failed = normalizeBatchFailures(payload?.failed);
   const filesFromPayload = normalizeBatchFileNames(payload?.files);
-  // Backend single-file success path returns only {status:"ok"} (auth_files.go:680).
-  // Derive count + names from the request when no failures and counts are absent.
   const inferFromRequest = payload?.uploaded === undefined && failed.length === 0;
   return {
     status: payload?.status ?? (failed.length > 0 ? 'partial' : 'ok'),
@@ -125,7 +135,6 @@ const normalizeBatchDeleteResponse = (
 ): AuthFileBatchDeleteResult => {
   const failed = normalizeBatchFailures(payload?.failed);
   const filesFromPayload = normalizeBatchFileNames(payload?.files);
-  // Backend single-name delete returns only {status:"ok"} (auth_files.go:794).
   const inferFromRequest = payload?.deleted === undefined && failed.length === 0;
   return {
     status: payload?.status ?? (failed.length > 0 ? 'partial' : 'ok'),
@@ -246,8 +255,6 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
   const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
   const note = readTextField(entry, 'note');
   const email = readTextField(entry, 'email');
-  // account / account_type 故意不归一化：api-key 类凭证的 account 就是 API key 本身
-  // （sdk/cliproxy/auth/types.go AccountInfo），不能进入展示与搜索路径。
   const projectId = readTextField(entry, 'project_id');
   const modified = readDateField(entry);
   const priority = readIntegerField(entry['priority']);
@@ -425,6 +432,12 @@ export const authFilesApi = {
       expired: buildManualRefreshExpiredAt(),
     }),
 
+  testCredential: (name: string, model?: string): Promise<AuthFileTestResult> =>
+    apiClient.post<AuthFileTestResult>(
+      `/auth-files/test?name=${encodeURIComponent(name)}`,
+      model ? { model } : {}
+    ),
+
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);
     if (requestedNames.length === 0) {
@@ -508,6 +521,7 @@ export const authFilesApi = {
 
   deleteOauthModelAlias: async (channel: string) => {
     const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
+    if (!normalizedChannel) return;
 
     try {
       await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
