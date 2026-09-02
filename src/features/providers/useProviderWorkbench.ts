@@ -73,7 +73,12 @@ import {
   isInfistarGeminiProvider,
   isInfistarOpenAIProvider,
 } from './infistar';
-import { buildKimiRaw, isKimiClaudeProvider, isKimiOpenAIProvider } from './kimi';
+import {
+  buildKimiRaw,
+  isKimiClaudeProvider,
+  isKimiCodexProvider,
+  isKimiOpenAIProvider,
+} from './kimi';
 import {
   getSponsorProviderDefinition,
   isTemporarilyHiddenSponsorBrand,
@@ -209,7 +214,7 @@ const buildProviderKeyConfig = (
     };
   }
   if (brand === 'claude') {
-    next.experimentalCchSigning = input.experimentalCchSigning === true;
+    next.fingerprintProfile = input.fingerprintProfile?.trim() || undefined;
   }
   return next;
 };
@@ -487,7 +492,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
               (fennoAIHidden || !isFennoAICodexProvider(item)) &&
               (qiniuCloudHidden || !isQiniuCloudCodexProvider(item)) &&
               !isLmuAICodexProvider(item) &&
-              !isInfistarCodexProvider(item)
+              !isInfistarCodexProvider(item) &&
+              !isKimiCodexProvider(item)
             ) {
               out.push(codexToResource(item, index));
             }
