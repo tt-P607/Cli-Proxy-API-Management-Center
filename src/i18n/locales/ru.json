@@ -2369,6 +2369,12 @@
     "output_tokens": "Выходные токены",
     "last_updated": "Обновлено"
   },
+  "service_health": {
+    "title": "Состояние сервиса",
+    "window": "Последние 7 дней",
+    "oldest": "Старые",
+    "newest": "Новые"
+  },
   "claude_reset": {
     "expiry_title": "Срок действия ручных сбросов ({{timezone}})",
     "grant_number": "Пакет {{index}}",

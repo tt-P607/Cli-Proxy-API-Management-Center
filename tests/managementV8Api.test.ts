@@ -322,4 +322,12 @@ describe('v8 management API contracts', () => {
     await configFileApi.saveConfigYaml('config: yaml');
     expect(put.mock.calls.at(-1)?.slice(0, 2)).toEqual(['/config.yaml', 'config: yaml']);
   });
+
+  test('credential test uses the v8 credentials route without changing its payload', async () => {
+    const post = mock('post', { status: 'ok' });
+    await authFilesApi.testCredential('account one.json', 'model-x');
+    expect(post).toHaveBeenCalledWith('/credentials/test?name=account%20one.json', {
+      model: 'model-x',
+    });
+  });
 });

@@ -107,7 +107,8 @@
     "plugin_store": "Cửa hàng Plugin",
     "config_management": "Bảng cấu hình",
     "logs": "Trình xem Log",
-    "system_info": "Thông tin Trung tâm Quản lý"
+    "system_info": "Thông tin Trung tâm Quản lý",
+    "usage_stats": "Thống kê sử dụng"
   },
   "nav_groups": {
     "operate": "Vận hành",
@@ -127,7 +128,8 @@
     "plugin_store": "Khám phá & cài đặt plugin",
     "logs": "Truy vết yêu cầu",
     "config_management": "Cấu hình gateway",
-    "system_info": "Runtime & chẩn đoán"
+    "system_info": "Runtime & chẩn đoán",
+    "usage_stats": "Thống kê sử dụng và token"
   },
   "dashboard": {
     "hero_verdict_good": "Mọi hệ thống ổn định",
@@ -2248,6 +2250,12 @@
     "weekly": "Quota hàng tuần",
     "unknown": "Không rõ",
     "remaining": "Còn lại {{percent}}%"
+  },
+  "service_health": {
+    "title": "Tình trạng dịch vụ",
+    "window": "7 ngày gần đây",
+    "oldest": "Cũ nhất",
+    "newest": "Mới nhất"
   },
   "claude_reset": {
     "expiry_title": "Hết hạn đặt lại thủ công ({{timezone}})",

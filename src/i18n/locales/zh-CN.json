@@ -2374,6 +2374,12 @@
     "output_tokens": "输出 Tokens",
     "last_updated": "更新于"
   },
+  "service_health": {
+    "title": "服务健康监测",
+    "window": "最近 7 天",
+    "oldest": "最早",
+    "newest": "最新"
+  },
   "claude_reset": {
     "expiry_title": "主动重置过期时间（{{timezone}}）",
     "grant_number": "第 {{index}} 批",

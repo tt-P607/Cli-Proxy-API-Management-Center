@@ -580,7 +580,7 @@ export const authFilesApi = {
 
   testCredential: (name: string, model?: string): Promise<AuthFileTestResult> =>
     apiClient.post<AuthFileTestResult>(
-      `/auth-files/test?name=${encodeURIComponent(name)}`,
+      `/credentials/test?name=${encodeURIComponent(name)}`,
       model ? { model } : {}
     ),
 

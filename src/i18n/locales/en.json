@@ -2375,6 +2375,12 @@
     "output_tokens": "Output Tokens",
     "last_updated": "Updated"
   },
+  "service_health": {
+    "title": "Service Health",
+    "window": "Last 7 days",
+    "oldest": "Oldest",
+    "newest": "Latest"
+  },
   "claude_reset": {
     "expiry_title": "Manual reset expiry ({{timezone}})",
     "grant_number": "Grant {{index}}",
