@@ -307,6 +307,14 @@ interface AntigravityBucketLike {
   periodHours?: number | null;
 }
 
+interface MetaWindowLike {
+  id: 'window' | 'weekly';
+  usedPercent: number | null;
+  /** Unix seconds from the upstream Meta contract. */
+  resetAt?: number;
+  durationMinutes?: number;
+}
+
 export interface TimelineLaneInput {
   name: string;
   displayName: string;
@@ -457,19 +465,12 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
       // length; weekly is what `periodType` already told us.
       periodHours: billing.periodHours ?? 24 * 7,
       remaining,
-      // Per-product usage is the closest analogue to the other providers'
-      // per-window breakdown.
-      limits: (billing.productUsage ?? [])
-        .map((entry) => ({
-          label: entry.product ?? '',
-          remaining:
-            typeof entry.usagePercent === 'number' ? clampPercent(100 - entry.usagePercent) : null,
-        }))
-        .filter((limit): limit is TimelineLimit => limit.remaining !== null),
+      // Products contribute to the shared weekly usage, not independent limits.
+      limits: [],
     };
   }
 
-  if (provider === 'antigravity') {
+  if (provider === 'antigravity' || provider === 'plugin') {
     // Buckets live one level down, inside groups, and the groups are a display
     // concern the chart doesn't care about — flatten them.
     const buckets = ((quota as { groups?: { buckets?: AntigravityBucketLike[] }[] }).groups ?? [])
@@ -513,6 +514,49 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
       remaining: remainingOf(chosen),
       limits: rows
         .map((row) => ({ label: row.label ?? '', remaining: remainingOf(row) }))
+        .filter((limit): limit is TimelineLimit => limit.remaining !== null),
+    };
+  }
+
+  if (provider === 'meta') {
+    const sourceWindows = (quota as { data?: { windows?: MetaWindowLike[] } }).data?.windows ?? [];
+    const windows = sourceWindows
+      // The upstream weekly bucket has no duration field; its scope defines seven days.
+      .map((window) => ({
+        ...window,
+        durationMinutes: window.id === 'weekly' ? 7 * 24 * 60 : window.durationMinutes,
+      }))
+      .filter(
+        (window) =>
+          typeof window.resetAt === 'number' &&
+          Number.isFinite(window.resetAt) &&
+          typeof window.durationMinutes === 'number' &&
+          Number.isFinite(window.durationMinutes) &&
+          window.durationMinutes > 0
+      )
+      .map((window) => ({
+        ...window,
+        resetAtMs: (window.resetAt as number) * 1000,
+        periodHours: (window.durationMinutes as number) / 60,
+      }));
+    const chosen = pickLaneWindow(windows, maxPeriodHours);
+    if (!chosen) return empty;
+
+    const remainingOf = (window: MetaWindowLike) =>
+      typeof window.usedPercent === 'number' && Number.isFinite(window.usedPercent)
+        ? clampPercent(100 - window.usedPercent)
+        : null;
+
+    return {
+      ...empty,
+      anchorMs: chosen.resetAtMs,
+      periodHours: chosen.periodHours,
+      remaining: remainingOf(chosen),
+      limits: windows
+        .map((window) => ({
+          label: `meta_quota.${window.id}`,
+          remaining: remainingOf(window),
+        }))
         .filter((limit): limit is TimelineLimit => limit.remaining !== null),
     };
   }
