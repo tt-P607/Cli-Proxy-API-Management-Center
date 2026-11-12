@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
+import { apiClient } from '@/services/api/client';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
 import type { AuthFileModelItem, OAuthConfigLoadError } from '@/features/authFiles/constants';
@@ -65,26 +66,20 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     []
   );
 
-  const providerList = useMemo(() => {
+  // Keep catalog dependencies stable across credential status and quota updates.
+  const providerListKey = useMemo(() => {
     const providers = new Set<string>();
-
-    Object.keys(modelAlias).forEach((provider) => {
-      const key = provider.trim().toLowerCase();
-      if (key) providers.add(key);
-    });
-
     files.forEach((file) => {
-      if (typeof file.type === 'string') {
-        const key = file.type.trim().toLowerCase();
-        if (key) providers.add(key);
-      }
-      if (typeof file.provider === 'string') {
-        const key = file.provider.trim().toLowerCase();
-        if (key) providers.add(key);
+      for (const provider of [file.type, file.provider]) {
+        if (typeof provider !== 'string') continue;
+        const key = normalizeProviderKey(provider);
+        if (key && key !== 'unknown') providers.add(key);
       }
     });
-    return Array.from(providers);
-  }, [files, modelAlias]);
+    return JSON.stringify([...providers].sort());
+  }, [files]);
+  const providerList = useMemo<string[]>(() => JSON.parse(providerListKey), [providerListKey]);
+  const connectionRevision = apiClient.getConnectionRevision();
 
   useEffect(() => {
     let cancelled = false;
@@ -101,7 +96,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
         providerList.map((provider) => authFilesApi.getModelDefinitions(provider))
       );
 
-      if (cancelled) return;
+      if (cancelled || connectionRevision !== apiClient.getConnectionRevision()) return;
 
       const nextModels: Record<string, AuthFileModelItem[]> = {};
       results.forEach((result, index) => {
@@ -109,7 +104,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
         if (result.status === 'rejected') {
           const message =
             result.reason instanceof Error ? result.reason.message : String(result.reason);
-          showNotification(`${t('notification.load_failed')}: ${provider} — ${message}`, 'error');
+          showNotification(`${t('system_info.models_error')}: ${provider} — ${message}`, 'error');
         } else if (result.value.length > 0) {
           nextModels[provider] = result.value;
         }
@@ -124,7 +119,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     return () => {
       cancelled = true;
     };
-  }, [providerList, showNotification, t]);
+  }, [connectionRevision, modelAlias, providerList, showNotification, t]);
 
   const loadExcluded = useCallback(async () => {
     const requestId = ++excludedLoadRequestRef.current;

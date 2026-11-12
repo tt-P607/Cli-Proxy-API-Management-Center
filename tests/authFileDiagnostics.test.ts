@@ -7,6 +7,8 @@ import i18next from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { AuthFileDiagnosticsToolbar } from '../src/features/authFiles/components/AuthFileDiagnosticsToolbar';
 import zhCN from '../src/i18n/locales/zh-CN.json';
+import type { AuthFileItem } from '../src/types';
+import { normalizeProviderKey } from '../src/features/authFiles/constants';
 import { getAuthFileRefreshKey } from '../src/features/authFiles/manualRefresh';
 import {
   diagnosticCategory,
@@ -26,8 +28,63 @@ describe('diagnostic model selection', () => {
     expect(harness.models).toEqual({ antigravity: [{ id: 'model-a' }] });
     expect(harness.loading).toBe(false);
     expect(harness.notifications).toEqual([
-      ['notification.load_failed: codex — catalog unavailable', 'error'],
+      ['获取模型列表失败: codex — catalog unavailable', 'error'],
     ]);
+  });
+
+  test('ignores unknown files and alias-only channels while retaining real plugin providers', async () => {
+    const harness = providerModelsHarness({
+      files: [
+        { name: 'ag.json', type: 'anti_gravity' },
+        { name: 'ag-duplicate.json', provider: 'antigravity', disabled: true },
+        { name: 'unrecognized.json', type: 'unknown' },
+        { name: 'plugin.json', type: 'custom-plugin' },
+      ],
+      aliases: { 'gemini-cli': [{ name: 'gemini-3-flash-preview', alias: 'old-cli-alias' }] },
+    });
+    expect(harness.requests.map((request) => request.provider)).toEqual([
+      'antigravity',
+      'custom-plugin',
+    ]);
+    for (const request of harness.requests) request.resolve([{ id: request.provider + '-model' }]);
+    await Promise.allSettled(harness.requests.map((request) => request.promise));
+    expect(harness.models).toEqual({
+      antigravity: [{ id: 'antigravity-model' }],
+      'custom-plugin': [{ id: 'custom-plugin-model' }],
+    });
+    expect(harness.notifications).toEqual([]);
+  });
+
+  test('does not reload catalogs on credential status refresh, but does after alias configuration refresh', async () => {
+    const harness = providerModelsHarness();
+    harness.rerender([
+      { name: 'codex.json', type: 'codex', disabled: true },
+      { name: 'disabled.json', type: 'antigravity', disabled: false },
+    ]);
+    expect(harness.requests).toHaveLength(2);
+    for (const request of harness.requests) request.resolve([{ id: request.provider }]);
+    await Promise.allSettled(harness.requests.map((request) => request.promise));
+    expect(harness.models).toEqual({
+      antigravity: [{ id: 'antigravity' }],
+      codex: [{ id: 'codex' }],
+    });
+    harness.setAliases({
+      'gemini-cli': [{ name: 'gemini-3-flash-preview', alias: 'refreshed-alias' }],
+    });
+    expect(harness.requests.map((request) => request.provider)).toEqual([
+      'antigravity',
+      'codex',
+      'antigravity',
+      'codex',
+    ]);
+    for (const request of harness.requests.slice(2))
+      request.resolve([{ id: request.provider + '-updated' }]);
+    await Promise.allSettled(harness.requests.slice(2).map((request) => request.promise));
+    expect(harness.models).toEqual({
+      antigravity: [{ id: 'antigravity-updated' }],
+      codex: [{ id: 'codex-updated' }],
+    });
+    expect(harness.notifications).toEqual([]);
   });
 
   test('discards provider catalog responses after the model-loading effect is cancelled', async () => {
@@ -38,6 +95,24 @@ describe('diagnostic model selection', () => {
     await Promise.allSettled(harness.requests.map((request) => request.promise));
     expect(harness.models).toEqual({});
     expect(harness.notifications).toEqual([]);
+  });
+
+  test('reloads unchanged provider channels for a new connection and ignores the previous responses', async () => {
+    const harness = providerModelsHarness();
+    harness.switchConnection();
+    expect(harness.requests).toHaveLength(4);
+    harness.requests[0].resolve([{ id: 'old-model' }]);
+    harness.requests[1].reject(new Error('old failure'));
+    await Promise.allSettled(harness.requests.slice(0, 2).map((request) => request.promise));
+    expect(harness.models).toEqual({});
+    expect(harness.notifications).toEqual([]);
+    for (const request of harness.requests.slice(2)) request.resolve([{ id: 'current-model' }]);
+    await Promise.allSettled(harness.requests.slice(2).map((request) => request.promise));
+    expect(harness.models).toEqual({
+      antigravity: [{ id: 'current-model' }],
+      codex: [{ id: 'current-model' }],
+    });
+    expect(harness.loading).toBe(false);
   });
 
   test('filters the provider catalog and deduplicates model IDs without depending on enabled accounts', () => {
@@ -89,9 +164,26 @@ describe('diagnostic model selection', () => {
   });
 });
 
-function providerModelsHarness() {
+function providerModelsHarness(
+  options: {
+    files?: AuthFileItem[];
+    aliases?: Record<string, Array<{ name: string; alias: string }>>;
+  } = {}
+) {
   const states: unknown[] = [];
-  const effects: Array<() => undefined | (() => void)> = [];
+  const refs: Array<{ current: unknown }> = [];
+  const memos: Array<{ deps: unknown[]; value: unknown }> = [];
+  const effects: Array<{ deps: unknown[]; cleanup?: () => void }> = [];
+  const pendingEffects: Array<() => void> = [];
+  let stateIndex = 0;
+  let refIndex = 0;
+  let memoIndex = 0;
+  let effectIndex = 0;
+  let revision = 1;
+  let files = options.files ?? [
+    { name: 'disabled.json', type: 'antigravity', disabled: true },
+    { name: 'codex.json', type: 'codex' },
+  ];
   const notifications: unknown[][] = [];
   const requests: Array<{
     provider: string;
@@ -99,25 +191,46 @@ function providerModelsHarness() {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
   }> = [];
+  const sameDeps = (a: unknown[], b: unknown[]) =>
+    a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
+  const showNotification = (...args: unknown[]) => notifications.push(args);
+  const showConfirmation = () => {};
+  const t = (key: string) =>
+    key === 'system_info.models_error' ? zhCN.system_info.models_error : key;
   const env = {
     useState: (initial: unknown) => {
-      const index = states.push(initial) - 1;
+      const index = stateIndex++;
+      if (!(index in states))
+        states[index] = index === 2 && options.aliases ? options.aliases : initial;
       return [
-        initial,
+        states[index],
         (value: unknown) => {
           states[index] = value;
         },
       ];
     },
-    useRef: (current: unknown) => ({ current }),
+    useRef: (current: unknown) => (refs[refIndex++] ??= { current }),
     useCallback: (callback: unknown) => callback,
-    useMemo: (factory: () => unknown) => factory(),
-    useEffect: (effect: () => undefined | (() => void)) => effects.push(effect),
-    useTranslation: () => ({ t: (key: string) => key }),
-    useNotificationStore: () => ({
-      showNotification: (...args: unknown[]) => notifications.push(args),
-      showConfirmation: () => {},
-    }),
+    useMemo: (factory: () => unknown, deps: unknown[]) => {
+      const index = memoIndex++;
+      if (!memos[index] || !sameDeps(memos[index].deps, deps))
+        memos[index] = { deps, value: factory() };
+      return memos[index].value;
+    },
+    useEffect: (effect: () => undefined | (() => void), deps: unknown[]) => {
+      const index = effectIndex++;
+      const previous = effects[index];
+      if (previous && sameDeps(previous.deps, deps)) return;
+      effects[index] = { deps };
+      pendingEffects.push(() => {
+        previous?.cleanup?.();
+        effects[index].cleanup = effect() ?? undefined;
+      });
+    },
+    useTranslation: () => ({ t }),
+    useNotificationStore: () => ({ showNotification, showConfirmation }),
+    normalizeProviderKey,
+    apiClient: { getConnectionRevision: () => revision },
     authFilesApi: {
       getModelDefinitions: (provider: string) => {
         const { promise, resolve, reject } = Promise.withResolvers<unknown>();
@@ -130,22 +243,31 @@ function providerModelsHarness() {
   const body = source
     .slice(source.indexOf('export function useAuthFilesOauth'))
     .replace('export function', 'function');
-  const js = ts.transpileModule(
-    `${body}\nreturn useAuthFilesOauth({ files: [
-    { name: 'disabled.json', type: 'antigravity', disabled: true },
-    { name: 'codex.json', type: 'codex' }
-  ] });`,
-    {
-      fileName: 'hook.tsx',
-      compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
-    }
-  ).outputText;
-  new Function(...Object.keys(env), js)(...Object.values(env));
-  const cancel = effects[1]()!;
+  const js = ts.transpileModule(`${body}\nreturn useAuthFilesOauth({ files });`, {
+    fileName: 'hook.tsx',
+    compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
+  }).outputText;
+  const runHook = new Function(...Object.keys(env), 'files', js);
+  const rerender = (nextFiles = files) => {
+    files = nextFiles;
+    stateIndex = refIndex = memoIndex = effectIndex = 0;
+    runHook(...Object.values(env), files);
+    for (const effect of pendingEffects.splice(0)) effect();
+  };
+  rerender();
   return {
     requests,
     notifications,
-    cancel,
+    cancel: () => effects.forEach((effect) => effect.cleanup?.()),
+    rerender,
+    switchConnection: () => {
+      revision++;
+      rerender();
+    },
+    setAliases: (aliases: Record<string, Array<{ name: string; alias: string }>>) => {
+      states[2] = aliases;
+      rerender();
+    },
     get models() {
       return states[4];
     },
