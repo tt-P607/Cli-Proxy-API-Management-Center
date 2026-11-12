@@ -414,9 +414,8 @@ describe('Claude usage snapshot rendering and retention', () => {
     expect(source).toContain("loading={quotaStatus === 'loading'}");
     expect(source).toContain("{t('auth_files.quota_refresh_single')}");
     expect(source).toContain("if (quota?.status === 'loading' || resettingQuota) return;");
-    expect(source).toContain(
-      'const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;'
-    );
+    expect(source).toContain('const canRefreshQuota = !disableControls && !resettingQuota;');
+    expect(source).not.toContain('if (file.disabled) return;');
     expect(source).toContain('{resetQuotaAction}');
     expect(CLAUDE_CONFIG).not.toHaveProperty('resetQuota');
   });

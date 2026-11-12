@@ -224,6 +224,18 @@
     "routing_strategy_fill_first": "fill-first (우선 채우기)"
   },
   "auth_files": {
+    "diagnostic_label": "직접 진단",
+    "diagnostic_filter": "테스트 결과",
+    "diagnostic_untested": "테스트 안 함",
+    "diagnostic_other": "기타 오류",
+    "diagnostic_local": "로컬 / 연결 오류",
+    "diagnostic_selected": "선택한 계정 테스트",
+    "diagnostic_retry": "필터 내 실패 항목 재테스트",
+    "diagnostic_notice": "실제 요청을 보내므로 할당량이 소모될 수 있습니다. 계정을 활성화하거나 격리를 해제하지 않습니다. 결과는 현재 페이지에만 유지됩니다.",
+    "diagnostic_progress": "{{completed}} / {{total}} · 동시 실행 2",
+    "diagnostic_cancel": "대기열 중지",
+    "diagnostic_stopped": "대기 중인 테스트가 취소되었습니다. 진행 중이던 요청이 완료되었습니다.",
+    "diagnostic_stopping": "대기열이 중지되었습니다. 진행 중인 요청을 기다리는 중입니다.",
     "title": "인증 파일 관리",
     "meta_total": "자격 증명 {{count}}개",
     "meta_active": "활성 {{count}}개",

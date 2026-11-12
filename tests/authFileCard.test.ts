@@ -39,7 +39,9 @@ describe('auth file card presentation contract', () => {
 
   test('dims disabled card content but keeps the re-enable controls clear', () => {
     expect(source).toContain("file.disabled === true ? styles.cardDisabled : ''");
-    expect(styles).toMatch(/\.cardDisabled\s*>\s*:not\(\.actions\)\s*\{\s*opacity:\s*0\.68;/);
+    expect(styles).toMatch(
+      /\.cardDisabled\s*>\s*:not\(\.actions\):not\(\.diagnostic\)\s*\{\s*opacity:\s*0\.68;/
+    );
     expect(styles).not.toMatch(/\.cardDisabled\s*\{[^}]*opacity:/);
   });
 
@@ -77,6 +79,7 @@ describe('auth file card presentation contract', () => {
     }
     expect(source).toContain('rawStatusMessage && hasStatusWarning');
     expect(source).toContain('showManualRefreshButton');
-    expect(source).toContain('file.disabled ||');
+    expect(source).not.toContain('file.disabled ||');
+    expect(source).toContain('<AuthFileDiagnostic');
   });
 });

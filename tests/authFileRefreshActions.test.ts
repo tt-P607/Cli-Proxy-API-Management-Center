@@ -87,6 +87,16 @@ function harness() {
 }
 
 describe('credential refresh action lifecycle', () => {
+  test('refreshes a disabled credential without changing its enabled state', async () => {
+    const h = harness();
+    const item = { name: 'disabled.json', authIndex: 'disabled', disabled: true };
+    const pending = h.single(item);
+    expect(h.calls).toEqual([['disabled.json', 'disabled']]);
+    h.resolve(undefined);
+    await pending;
+    expect(item.disabled).toBe(true);
+    expect(h.loads).toBe(1);
+  });
   test('requires confirmation, prevents overlap, and exposes individual results', async () => {
     const h = harness();
     h.all();

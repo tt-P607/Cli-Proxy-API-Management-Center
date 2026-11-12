@@ -36,6 +36,8 @@ import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQu
 import { AuthFileCooldownSection } from './AuthFileCooldownSection';
 import { getSiwcBindingStatus, supportsSiwcBinding } from '@/features/oauth/siwcBinding';
 import { SiwcStatusBadge } from '@/features/oauth/components/SiwcStatusBadge';
+import { AuthFileDiagnostic } from './AuthFileDiagnostic';
+import type { CredentialDiagnostic } from '../diagnostics';
 import styles from './AuthFileCard.module.scss';
 
 export type AuthFileCardProps = {
@@ -44,6 +46,11 @@ export type AuthFileCardProps = {
   selected: boolean;
   resolvedTheme: ResolvedTheme;
   disableControls: boolean;
+  diagnostic?: CredentialDiagnostic;
+  testing: boolean;
+  testDisabled: boolean;
+  onTest: () => void;
+  onCopyTest: (text: string) => void | Promise<void>;
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
   manualRefreshing: Record<string, boolean>;
@@ -266,6 +273,23 @@ export function AuthFileCard(props: AuthFileCardProps) {
         <AuthFileQuotaSection file={file} quotaType={quotaType} disableControls={disableControls} />
       )}
 
+      {!isRuntimeOnly && (
+        <div className={styles.diagnostic}>
+          <AuthFileDiagnostic
+            record={props.diagnostic}
+            testing={props.testing}
+            disabled={
+              disableControls ||
+              props.testDisabled ||
+              isManualRefreshing ||
+              statusUpdating[getAuthFileRefreshKey(file)] === true
+            }
+            onTest={props.onTest}
+            onCopy={props.onCopyTest}
+          />
+        </div>
+      )}
+
       <footer className={styles.actions}>
         <div className={styles.actionsMain}>
           {showModelsButton && (
@@ -291,7 +315,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   title={t('auth_files.manual_refresh_button')}
                   disabled={
                     disableControls ||
-                    file.disabled ||
                     statusUpdating[getAuthFileRefreshKey(file)] === true ||
                     isManualRefreshing
                   }

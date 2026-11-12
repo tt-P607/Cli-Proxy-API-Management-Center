@@ -63,6 +63,7 @@ export type PrefixProxyEditorFieldValue = string | boolean | CredentialPolicyVal
 export type PrefixProxyEditorState = {
   policy?: CredentialPolicyDraft;
   fileName: string;
+  authIndex?: string;
   fileInfoText: string;
   loading: boolean;
   saving: boolean;
@@ -552,6 +553,7 @@ export function useAuthFilesPrefixProxyEditor(
 
     setPrefixProxyEditor({
       fileName: name,
+      authIndex: String(file.authIndex ?? '').trim() || undefined,
       fileInfoText: JSON.stringify(file, null, 2),
       loading: true,
       saving: false,
@@ -712,7 +714,8 @@ export function useAuthFilesPrefixProxyEditor(
       }
       if (field === 'prefix') return { ...prev, prefix: String(value) };
       if (field === 'proxyUrl') return { ...prev, proxyUrl: String(value) };
-      if (field === 'projectId') return { ...prev, projectId: String(value), projectIdTouched: true };
+      if (field === 'projectId')
+        return { ...prev, projectId: String(value), projectIdTouched: true };
       if (field === 'priority') return { ...prev, priority: String(value) };
       if (field === 'weight') {
         const weight = String(value);

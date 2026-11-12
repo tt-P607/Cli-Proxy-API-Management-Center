@@ -65,7 +65,6 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const refreshQuotaForFile = useCallback(async () => {
     if (disableControls) return;
     if (isRuntimeOnlyAuthFile(file)) return;
-    if (file.disabled) return;
     if (quota?.status === 'loading' || resettingQuota) return;
 
     const cacheGeneration = captureQuotaCacheGeneration(file.name);
@@ -160,7 +159,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   ]);
 
   const quotaStatus = quota?.status ?? 'idle';
-  const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
+  const canRefreshQuota = !disableControls && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   // Idle state already renders a clickable "click to refresh" prompt; only offer the
   // explicit refresh button once quota has been requested so it can be refreshed again.

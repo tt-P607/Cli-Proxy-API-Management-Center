@@ -224,6 +224,18 @@
     "routing_strategy_fill_first": "fill-first (ưu tiên lấp đầy)"
   },
   "auth_files": {
+    "diagnostic_label": "Chẩn đoán chủ động",
+    "diagnostic_filter": "Kết quả kiểm tra",
+    "diagnostic_untested": "Chưa kiểm tra",
+    "diagnostic_other": "Lỗi khác",
+    "diagnostic_local": "Lỗi cục bộ / kết nối",
+    "diagnostic_selected": "Kiểm tra tài khoản đã chọn",
+    "diagnostic_retry": "Kiểm tra lại lỗi trong bộ lọc",
+    "diagnostic_notice": "Gửi yêu cầu thật và có thể tốn hạn mức. Không bật tài khoản hoặc xóa cách ly. Kết quả chỉ được giữ trên trang hiện tại.",
+    "diagnostic_progress": "{{completed}} / {{total}} · đồng thời 2",
+    "diagnostic_cancel": "Dừng hàng đợi",
+    "diagnostic_stopped": "Đã hủy các kiểm tra đang chờ. Các yêu cầu đã gửi đã hoàn tất.",
+    "diagnostic_stopping": "Đã dừng hàng đợi; đang chờ các yêu cầu đã gửi.",
     "title": "Quản lý File xác thực",
     "meta_total": "{{count}} credential",
     "meta_active": "{{count}} đang hoạt động",

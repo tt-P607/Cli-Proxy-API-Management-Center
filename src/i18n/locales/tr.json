@@ -224,6 +224,18 @@
     "routing_strategy_fill_first": "Fill-First (Önceliklendir)"
   },
   "auth_files": {
+    "diagnostic_label": "Etkin tanılama",
+    "diagnostic_filter": "Test sonucu",
+    "diagnostic_untested": "Test edilmedi",
+    "diagnostic_other": "Diğer hatalar",
+    "diagnostic_local": "Yerel / bağlantı hataları",
+    "diagnostic_selected": "Seçilenleri test et",
+    "diagnostic_retry": "Filtrelenen hataları yeniden test et",
+    "diagnostic_notice": "Gerçek istekler gönderilir ve kota harcanabilir. Hesaplar etkinleştirilmez veya izolasyon kaldırılmaz. Sonuçlar yalnızca bu sayfada tutulur.",
+    "diagnostic_progress": "{{completed}} / {{total}} · eşzamanlı 2",
+    "diagnostic_cancel": "Kuyruğu durdur",
+    "diagnostic_stopped": "Kuyruktaki testler iptal edildi. Devam eden istekler tamamlandı.",
+    "diagnostic_stopping": "Kuyruk durduruldu; devam eden istekler bekleniyor.",
     "title": "Kimlik Dosyası Yönetimi",
     "meta_total": "{{count}} Kimlik Bilgisi",
     "meta_active": "{{count}} Aktif",

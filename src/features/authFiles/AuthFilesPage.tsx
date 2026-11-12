@@ -58,12 +58,16 @@ import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
 import { resolveAuthProvider } from '@/utils/quota';
 import { QUOTA_ADAPTERS, type QuotaAdapter } from '@/features/quota/providers';
 import { useQuotaActions } from '@/features/quota/hooks/useQuotaActions';
+import { apiClient } from '@/services/api/client';
+import { useAuthFileDiagnostics } from './hooks/useAuthFileDiagnostics';
+import { diagnosticCategory, matchesDiagnosticFilter, type DiagnosticFilter } from './diagnostics';
+import { AuthFileDiagnosticsToolbar } from './components/AuthFileDiagnosticsToolbar';
 import styles from './AuthFilesPage.module.scss';
 
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
 const SKELETON_CARD_COUNT = 6;
-/** 首屏卡片级联入场总预算，与 useRevealGroup 同一 360ms 语汇。 */
+/** Total entrance animation budget, matching useRevealGroup. */
 const CARD_ENTRANCE_BUDGET_MS = 360;
 
 const resolveStatusFilterMode = (
@@ -83,6 +87,10 @@ const normalizePersistedStatusFilterMode = (value: unknown): AuthFilesStatusFilt
 export function AuthFilesPage() {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
+  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
+  const diagnostics = useAuthFileDiagnostics(apiClient.getConnectionRevision());
+  const [diagnosticFilter, setDiagnosticFilter] = useState<DiagnosticFilter>('all');
+  const [diagnosticModel, setDiagnosticModel] = useState('');
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const pageTransitionLayer = usePageTransitionLayer();
@@ -205,7 +213,7 @@ export function AuthFilesPage() {
   const disabledOnly = statusFilterMode === 'disabled';
   const enabledOnly = statusFilterMode === 'enabled';
 
-  /* ---------- uiState 水合与持久化（localStorage key/形状与旧版完全一致） ---------- */
+  /* ---------- UI state hydration and persistence ---------- */
 
   useEffect(() => {
     const persistedCompactMode = readPersistedAuthFilesCompactMode();
@@ -342,7 +350,7 @@ export function AuthFilesPage() {
       if (!Number.isFinite(parsed)) return;
 
       const rounded = Math.round(parsed);
-      // 超出 [MIN, MAX] 时不提交（clamp 后不等于原值即越界）
+      // Do not commit values outside the supported range.
       if (clampCardPageSize(rounded) !== rounded) return;
 
       setCurrentModePageSize(rounded);
@@ -365,7 +373,7 @@ export function AuthFilesPage() {
     setPage(1);
   }, []);
 
-  /* ---------- 数据加载：首载前台（骨架屏），此后一律后台（不清空网格） ---------- */
+  /* ---------- Initial foreground load and subsequent background refreshes ---------- */
 
   const initialLoadDoneRef = useRef(false);
 
@@ -390,7 +398,7 @@ export function AuthFilesPage() {
     isCurrentLayer ? 240_000 : null
   );
 
-  /* ---------- 过滤 / 排序 / 分页 memos ---------- */
+  /* ---------- Filtering, sorting and pagination ---------- */
 
   const existingTypes = useMemo(() => {
     const types = new Set<string>(['all']);
@@ -450,9 +458,23 @@ export function AuthFilesPage() {
       filesMatchingStatusFilters.filter((item) => {
         const type = normalizeProviderKey(String(item.type ?? item.provider ?? ''));
         const matchType = normalizedFilter === 'all' || type === normalizedFilter;
-        return matchType && matchesAuthFileSearch(item, normalizedSearch, wildcardSearch);
+        return (
+          matchType &&
+          matchesAuthFileSearch(item, normalizedSearch, wildcardSearch) &&
+          matchesDiagnosticFilter(
+            diagnostics.records[getAuthFileRefreshKey(item)],
+            diagnosticFilter
+          )
+        );
       }),
-    [filesMatchingStatusFilters, normalizedFilter, normalizedSearch, wildcardSearch]
+    [
+      filesMatchingStatusFilters,
+      normalizedFilter,
+      normalizedSearch,
+      wildcardSearch,
+      diagnostics.records,
+      diagnosticFilter,
+    ]
   );
 
   const [refreshAllQuotaLoading, setRefreshAllQuotaLoading] = useState(false);
@@ -492,6 +514,34 @@ export function AuthFilesPage() {
     [sorted]
   );
   const selectedNames = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
+  const testActionsDisabled = diagnostics.batch.running || diagnostics.running.size > 0;
+  const failedTargets = filtered.filter((file) => {
+    const category = diagnosticCategory(diagnostics.records[getAuthFileRefreshKey(file)]);
+    return !isRuntimeOnlyAuthFile(file) && category !== 'untested' && category !== 'success';
+  });
+  const confirmBatchTest = (targets: typeof files) => {
+    if (disableControls || testActionsDisabled || targets.length === 0) return;
+    const revision = apiClient.getConnectionRevision();
+    showConfirmation({
+      title: t('auth_files.diagnostic_selected'),
+      message: `${t('auth_files.diagnostic_notice')} (${targets.length})`,
+      confirmText: t('auth_files.test_button'),
+      onConfirm: () => {
+        if (revision !== apiClient.getConnectionRevision()) return;
+        void diagnostics.startBatch(targets, diagnosticModel).catch((error: unknown) => {
+          showNotification(error instanceof Error ? error.message : String(error), 'error');
+        });
+      },
+    });
+  };
+  const editorFile = prefixProxyEditor
+    ? files.find(
+        (file) =>
+          file.name === prefixProxyEditor.fileName &&
+          String(file.authIndex ?? '').trim() === String(prefixProxyEditor.authIndex ?? '').trim()
+      )
+    : undefined;
+  const editorTestKey = editorFile ? getAuthFileRefreshKey(editorFile) : '';
   const selectedHasStatusUpdating = useMemo(
     () =>
       files.some(
@@ -506,15 +556,13 @@ export function AuthFilesPage() {
     batchStatusUpdating ||
     selectedHasStatusUpdating;
 
-  /* ---------- 头部遥测计数 ---------- */
+  /* ---------- Header counters ---------- */
 
   const activeCount = useMemo(() => files.filter((file) => file.disabled !== true).length, [files]);
   const problemCount = useMemo(() => files.filter(isProblemAuthFile).length, [files]);
 
-  /* ---------- 首屏卡片一次性级联入场 ----------
-   * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过
-   * 自己的延迟（AuthFileCard 内 useState 初始化），不受后续 null 影响，
-   * 而过滤/翻页/轮询新挂载的卡片拿到 null——不重播。 */
+  /* Cards capture their initial entrance delay on mount. Filtering, pagination
+   * and polling mount subsequent cards without replaying the entrance. */
 
   const [cardsAnimated, setCardsAnimated] = useState(false);
   const enableCardEntrance = !cardsAnimated && isCurrentLayer && !loading && pageItems.length > 0;
@@ -529,7 +577,7 @@ export function AuthFilesPage() {
     return Math.round((index / (pageItems.length - 1)) * CARD_ENTRANCE_BUDGET_MS);
   };
 
-  /* ---------- 杂项 ---------- */
+  /* ---------- Navigation and clipboard actions ---------- */
 
   const copyTextWithNotification = useCallback(
     async (text: string) => {
@@ -578,6 +626,7 @@ export function AuthFilesPage() {
     setFilter('all');
     setStatusFilterMode('all');
     setSearch('');
+    setDiagnosticFilter('all');
     setPage(1);
   }, []);
 
@@ -668,7 +717,13 @@ export function AuthFilesPage() {
           compactMode={compactMode}
           onCompactModeChange={setCompactMode}
           deleteLabel={deleteAllButtonLabel}
-          deleteDisabled={disableControls || loading || deletingAll || files.length === 0}
+          deleteDisabled={
+            disableControls ||
+            loading ||
+            deletingAll ||
+            files.length === 0 ||
+            diagnosticFilter !== 'all'
+          }
           deleteLoading={deletingAll}
           refreshAllQuotaLabel={t('auth_files.refresh_all_quota_label')}
           refreshAllQuotaDisabled={disableControls || loading || filtered.length === 0}
@@ -686,6 +741,21 @@ export function AuthFilesPage() {
               onResetEnabledOnly: () => setStatusFilterMode('all'),
             })
           }
+        />
+
+        <AuthFileDiagnosticsToolbar
+          filter={diagnosticFilter}
+          onFilter={(value) => {
+            setDiagnosticFilter(value);
+            setPage(1);
+          }}
+          model={diagnosticModel}
+          onModel={setDiagnosticModel}
+          disabled={disableControls || diagnostics.running.size > 0}
+          canRetry={failedTargets.length > 0}
+          onRetry={() => confirmBatchTest(failedTargets)}
+          batch={diagnostics.batch}
+          onCancel={diagnostics.cancel}
         />
 
         {error && (
@@ -739,6 +809,11 @@ export function AuthFilesPage() {
                 selected={selectedFiles.has(file.name)}
                 resolvedTheme={resolvedTheme}
                 disableControls={disableControls}
+                diagnostic={diagnostics.records[getAuthFileRefreshKey(file)]}
+                testing={diagnostics.running.has(getAuthFileRefreshKey(file))}
+                testDisabled={testActionsDisabled}
+                onTest={() => void diagnostics.test(file, diagnosticModel)}
+                onCopyTest={copyTextWithNotification}
                 deleting={deleting}
                 statusUpdating={statusUpdating}
                 manualRefreshing={manualRefreshing}
@@ -832,6 +907,12 @@ export function AuthFilesPage() {
 
       <AuthFileDetailsSheet
         disableControls={disableControls}
+        diagnostic={diagnostics.records[editorTestKey]}
+        testing={diagnostics.running.has(editorTestKey)}
+        testDisabled={testActionsDisabled || !editorFile}
+        onTest={(model) => {
+          if (editorFile) void diagnostics.test(editorFile, model);
+        }}
         editor={prefixProxyEditor}
         updatedText={prefixProxyUpdatedText}
         dirty={prefixProxyDirty}
@@ -847,6 +928,12 @@ export function AuthFilesPage() {
         selectableFilteredCount={selectableFilteredItems.length}
         disableControls={disableControls}
         batchStatusDisabled={batchStatusButtonsDisabled}
+        testDisabled={testActionsDisabled}
+        onTest={() =>
+          confirmBatchTest(
+            files.filter((file) => selectedFiles.has(file.name) && !isRuntimeOnlyAuthFile(file))
+          )
+        }
         onSelectPage={() => selectAllVisible(pageItems)}
         onSelectFiltered={() => selectAllVisible(sorted)}
         onInvertPage={() => invertVisibleSelection(pageItems)}

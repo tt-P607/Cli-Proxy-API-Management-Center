@@ -23,6 +23,7 @@ type AuthFileEntry = AuthFilesResponse['files'][number];
 
 export type AuthFileTestResult = {
   status_code: number;
+  error_source?: string;
   latency_ms?: number;
   model?: string;
   message?: string;
@@ -578,9 +579,9 @@ export const authFilesApi = {
     });
   },
 
-  testCredential: (name: string, model?: string): Promise<AuthFileTestResult> =>
+  testCredential: (name: string, model?: string, authIndex?: string): Promise<AuthFileTestResult> =>
     apiClient.post<AuthFileTestResult>(
-      `/credentials/test?name=${encodeURIComponent(name)}`,
+      `/credentials/test?name=${encodeURIComponent(name)}${authIndex ? `&auth_index=${encodeURIComponent(authIndex)}` : ''}`,
       model ? { model } : {}
     ),
 

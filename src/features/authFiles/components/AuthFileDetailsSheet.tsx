@@ -7,7 +7,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
-import { authFilesApi, type AuthFileTestResult } from '@/services/api';
+import { authFilesApi } from '@/services/api';
+import type { CredentialDiagnostic } from '../diagnostics';
 import { useNotificationStore } from '@/stores';
 import type {
   PrefixProxyEditorField,
@@ -25,7 +26,7 @@ import { AuthFilePolicyFields } from './AuthFilePolicyFields';
 import { credentialPolicyError, readCredentialPolicy } from '../credentialPolicy';
 import styles from './AuthFileDetailsSheet.module.scss';
 
-/** API 边界归一化补写的派生字段——INFO 视图里只展示后端原始形状，避免重复噪音。 */
+/** Omit derived normalization fields from the raw INFO view. */
 const DERIVED_INFO_KEYS = [
   'successCount',
   'failureCount',
@@ -34,12 +35,16 @@ const DERIVED_INFO_KEYS = [
   'authIndex',
   'statusMessage',
   'modified',
-  // 'email' 不在此列：后端原始键名与 camelCase 同形，删掉会藏起真实数据。
+  // Email uses the same raw and normalized key, so it must remain visible.
   'projectId',
 ];
 
 export type AuthFileDetailsSheetProps = {
   disableControls: boolean;
+  diagnostic?: CredentialDiagnostic;
+  testing: boolean;
+  testDisabled: boolean;
+  onTest: (model: string) => void;
   editor: PrefixProxyEditorState | null;
   updatedText: string;
   dirty: boolean;
@@ -50,8 +55,7 @@ export type AuthFileDetailsSheetProps = {
 };
 
 /**
- * 凭证详情/编辑抽屉：替代旧的居中 Modal，与提供商工作台的 Sheet 模式一致。
- * 脏状态下关闭（Escape/遮罩/×/取消）先走确认对话框。
+ * Credential details and editing sheet with confirmation before discarding changes.
  */
 export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
   const { t } = useTranslation();
@@ -61,21 +65,19 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const showNotification = useNotificationStore((state) => state.showNotification);
 
-  // 测试请求本地状态
   const [testModel, setTestModel] = useState('');
   const [testModelsLoading, setTestModelsLoading] = useState(false);
   const [testModelOptions, setTestModelOptions] = useState<string[]>([]);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<AuthFileTestResult | null>(null);
+  const testing = props.testing;
+  const testResult = props.diagnostic?.result;
 
-  // 打开抽屉时加载该凭证支持的模型列表（供测试模型下拉选择）
+  // Load the credential's supported models when opening the sheet.
   const activeFileName = editor?.fileName;
   useEffect(() => {
     if (!activeFileName) return;
     let cancelled = false;
     setTestModelsLoading(true);
     setTestModel('');
-    setTestResult(null);
     setTestModelOptions([]);
     void authFilesApi
       .getModelsForAuthFile(activeFileName)
@@ -117,7 +119,6 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
   const handleCancelClick = useCallback(() => {
     void Promise.resolve(confirmClose()).then((ok) => {
       if (ok) {
-        setTestResult(null);
         onClose();
       }
     });
@@ -158,37 +159,10 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
         return JSON.stringify(record, null, 2);
       }
     } catch {
-      /* 非 JSON 原样展示 */
+      /* Preserve non-JSON content verbatim. */
     }
     return fileInfoText;
   }, [fileInfoText]);
-
-  const handleTestCredential = useCallback(async () => {
-    if (!editor?.fileName || testing) return;
-    setTesting(true);
-    try {
-      const res = await authFilesApi.testCredential(editor.fileName, testModel.trim() || undefined);
-      setTestResult(res);
-      if (res.status_code === 200) {
-        showNotification(t('auth_files.test_result_success'), 'success');
-      } else {
-        showNotification(
-          `${t('auth_files.test_result_failed')}: ${res.error ?? res.message}`,
-          'error'
-        );
-      }
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setTestResult({
-        status_code: 0,
-        error: errMsg,
-        message: t('auth_files.test_result_failed'),
-      });
-      showNotification(`${t('auth_files.test_result_failed')}: ${errMsg}`, 'error');
-    } finally {
-      setTesting(false);
-    }
-  }, [editor, showNotification, t, testModel, testing]);
 
   const formattedTestResponse = useMemo(() => {
     if (!testResult) return '';
@@ -209,7 +183,6 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
     <Sheet
       open={Boolean(editor)}
       onClose={() => {
-        setTestResult(null);
         onClose();
       }}
       confirmClose={confirmClose}
@@ -416,7 +389,7 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                     onChange={(e) => onChange('note', e.target.value)}
                   />
 
-                  {/* 凭证测试请求与响应详情 */}
+                  {/* Credential test request and response details. */}
                   <section className={styles.testSection}>
                     <div className={styles.testHeader}>
                       <span className={styles.testTitle}>{t('auth_files.test_section_title')}</span>
@@ -439,9 +412,9 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                       </div>
                       <Button
                         variant="secondary"
-                        onClick={() => void handleTestCredential()}
+                        onClick={() => props.onTest(testModel)}
                         loading={testing}
-                        disabled={testing || disableControls}
+                        disabled={testing || disableControls || props.testDisabled}
                       >
                         {testing ? t('auth_files.test_running') : t('auth_files.test_button')}
                       </Button>
@@ -468,9 +441,7 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                               </span>
                             )}
                             {testResult.model && (
-                              <span className={styles.testLatency}>
-                                ({testResult.model})
-                              </span>
+                              <span className={styles.testLatency}>({testResult.model})</span>
                             )}
                           </div>
                           {formattedTestResponse && (

@@ -329,5 +329,10 @@ describe('v8 management API contracts', () => {
     expect(post).toHaveBeenCalledWith('/credentials/test?name=account%20one.json', {
       model: 'model-x',
     });
+    await authFilesApi.testCredential('account one.json', undefined, 'selected-index');
+    expect(post).toHaveBeenLastCalledWith(
+      '/credentials/test?name=account%20one.json&auth_index=selected-index',
+      {}
+    );
   });
 });

@@ -18,6 +18,8 @@ export type BatchActionBarProps = {
   selectableFilteredCount: number;
   disableControls: boolean;
   batchStatusDisabled: boolean;
+  testDisabled: boolean;
+  onTest: () => void;
   onSelectPage: () => void;
   onSelectFiltered: () => void;
   onInvertPage: () => void;
@@ -29,10 +31,9 @@ export type BatchActionBarProps = {
 };
 
 /**
- * 悬浮批量操作条：portal 到 body 的玻璃工具栏。
- * - 选中数 >0 时上浮入场（0.28s 强减速），清零后加速退场（0.22s）再卸载；
- * - reduced-motion 下只做透明度淡入淡出（保留 translateX(-50%) 基础变换，防止错位半宽）；
- * - 实时高度写入 --auth-files-action-bar-height 供页面底部留白。
+ * Floating batch toolbar rendered into the document body.
+ * Reduced motion preserves horizontal centering while fading in and out.
+ * Its measured height reserves space at the bottom of the page.
  */
 export function BatchActionBar(props: BatchActionBarProps) {
   const {
@@ -183,6 +184,14 @@ export function BatchActionBar(props: BatchActionBarProps) {
           </Button>
         </div>
         <div className={styles.right}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={props.onTest}
+            disabled={disableControls || props.testDisabled || selectionCount === 0}
+          >
+            {t('auth_files.diagnostic_selected')}
+          </Button>
           <Button
             variant="secondary"
             size="sm"
