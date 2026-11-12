@@ -79,7 +79,7 @@ Upgrade the backend first and back up `config.yaml`. The backend returns the v8 
 | **Plugins** | Access plugin management when the connected backend advertises support. |
 | **System** | Check for updates, inspect available models, and clear local login data. |
 
-Auth cards support direct credential tests, including disabled accounts. Select accounts for a two-request concurrent batch, stop queued tests, or filter and retest failures by status. Expand a result to inspect or copy the raw response; results are shared with the details sheet and kept only on the current page. An optional model overrides the account's registered default. Tests may consume quota. Testing, refreshing quota, and refreshing credentials do not enable disabled accounts or clear isolation.
+Auth cards support direct credential tests, including disabled accounts. Select accounts for a two-request concurrent batch, stop queued tests, or filter and retest failures by status. Expand a result to inspect or copy the raw response; results are shared with the details sheet and kept only on the current page. Choose a test model from the provider catalog dropdown for the current filter, or keep automatic selection. Tests may consume quota. Testing, refreshing quota, and refreshing credentials do not enable disabled accounts or clear isolation.
 
 Supports **English, 简体中文, 繁體中文, and Русский**, with browser-language detection and a manual language switch. Responsive layouts support desktop, tablet, and mobile use in modern Chrome, Firefox, Safari, and Edge.
 

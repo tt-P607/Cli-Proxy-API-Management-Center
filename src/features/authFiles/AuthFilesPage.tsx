@@ -60,7 +60,12 @@ import { QUOTA_ADAPTERS, type QuotaAdapter } from '@/features/quota/providers';
 import { useQuotaActions } from '@/features/quota/hooks/useQuotaActions';
 import { apiClient } from '@/services/api/client';
 import { useAuthFileDiagnostics } from './hooks/useAuthFileDiagnostics';
-import { diagnosticCategory, matchesDiagnosticFilter, type DiagnosticFilter } from './diagnostics';
+import {
+  diagnosticCategory,
+  diagnosticModelIds,
+  matchesDiagnosticFilter,
+  type DiagnosticFilter,
+} from './diagnostics';
 import { AuthFileDiagnosticsToolbar } from './components/AuthFileDiagnosticsToolbar';
 import styles from './AuthFilesPage.module.scss';
 
@@ -173,6 +178,7 @@ export function AuthFilesPage() {
     modelAlias,
     modelAliasError,
     allProviderModels,
+    providerModelsLoading,
     loadExcluded,
     loadModelAlias,
     deleteExcluded,
@@ -182,7 +188,7 @@ export function AuthFilesPage() {
     handleToggleFork,
     handleRenameAlias,
     handleDeleteAlias,
-  } = useAuthFilesOauth({ viewMode, files });
+  } = useAuthFilesOauth({ files });
 
   const {
     prefixProxyEditor,
@@ -420,6 +426,12 @@ export function AuthFilesPage() {
     [disabledOnly, enabledOnly, files, problemOnly]
   );
 
+  const diagnosticModels = useMemo(
+    () => diagnosticModelIds(allProviderModels, normalizedFilter),
+    [allProviderModels, normalizedFilter]
+  );
+  const activeDiagnosticModel = diagnosticModels.includes(diagnosticModel) ? diagnosticModel : '';
+
   const statusFilterOptions = useMemo(
     () =>
       [
@@ -528,7 +540,7 @@ export function AuthFilesPage() {
       confirmText: t('auth_files.test_button'),
       onConfirm: () => {
         if (revision !== apiClient.getConnectionRevision()) return;
-        void diagnostics.startBatch(targets, diagnosticModel).catch((error: unknown) => {
+        void diagnostics.startBatch(targets, activeDiagnosticModel).catch((error: unknown) => {
           showNotification(error instanceof Error ? error.message : String(error), 'error');
         });
       },
@@ -695,6 +707,7 @@ export function AuthFilesPage() {
           resolvedTheme={resolvedTheme}
           onChange={(type) => {
             setFilter(type);
+            setDiagnosticModel('');
             setPage(1);
           }}
         />
@@ -749,7 +762,9 @@ export function AuthFilesPage() {
             setDiagnosticFilter(value);
             setPage(1);
           }}
-          model={diagnosticModel}
+          model={activeDiagnosticModel}
+          models={diagnosticModels}
+          modelsLoading={providerModelsLoading}
           onModel={setDiagnosticModel}
           disabled={disableControls || diagnostics.running.size > 0}
           canRetry={failedTargets.length > 0}
@@ -812,7 +827,7 @@ export function AuthFilesPage() {
                 diagnostic={diagnostics.records[getAuthFileRefreshKey(file)]}
                 testing={diagnostics.running.has(getAuthFileRefreshKey(file))}
                 testDisabled={testActionsDisabled}
-                onTest={() => void diagnostics.test(file, diagnosticModel)}
+                onTest={() => void diagnostics.test(file, activeDiagnosticModel)}
                 onCopyTest={copyTextWithNotification}
                 deleting={deleting}
                 statusUpdating={statusUpdating}

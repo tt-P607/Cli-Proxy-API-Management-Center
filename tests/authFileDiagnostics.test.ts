@@ -1,12 +1,159 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import i18next from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import { AuthFileDiagnosticsToolbar } from '../src/features/authFiles/components/AuthFileDiagnosticsToolbar';
+import zhCN from '../src/i18n/locales/zh-CN.json';
 import { getAuthFileRefreshKey } from '../src/features/authFiles/manualRefresh';
 import {
   diagnosticCategory,
+  diagnosticModelIds,
   matchesDiagnosticFilter,
   runDiagnosticQueue,
 } from '../src/features/authFiles/diagnostics';
+
+describe('diagnostic model selection', () => {
+  test('loads provider catalogs in list mode, retaining successful catalogs and reporting failures', async () => {
+    const harness = providerModelsHarness();
+    expect(harness.requests.map((request) => request.provider)).toEqual(['antigravity', 'codex']);
+    expect(harness.loading).toBe(true);
+    harness.requests[0].resolve([{ id: 'model-a' }]);
+    harness.requests[1].reject(new Error('catalog unavailable'));
+    await Promise.allSettled(harness.requests.map((request) => request.promise));
+    expect(harness.models).toEqual({ antigravity: [{ id: 'model-a' }] });
+    expect(harness.loading).toBe(false);
+    expect(harness.notifications).toEqual([
+      ['notification.load_failed: codex — catalog unavailable', 'error'],
+    ]);
+  });
+
+  test('discards provider catalog responses after the model-loading effect is cancelled', async () => {
+    const harness = providerModelsHarness();
+    harness.cancel();
+    harness.requests[0].resolve([{ id: 'outdated' }]);
+    harness.requests[1].reject(new Error('outdated failure'));
+    await Promise.allSettled(harness.requests.map((request) => request.promise));
+    expect(harness.models).toEqual({});
+    expect(harness.notifications).toEqual([]);
+  });
+
+  test('filters the provider catalog and deduplicates model IDs without depending on enabled accounts', () => {
+    const catalog = {
+      antigravity: [{ id: 'model-b' }, { id: ' model-a ' }],
+      codex: [{ id: 'model-b' }, { id: 'model-c' }, { id: '' }],
+    };
+    expect(diagnosticModelIds(catalog, 'antigravity')).toEqual(['model-a', 'model-b']);
+    expect(diagnosticModelIds(catalog, 'all')).toEqual(['model-a', 'model-b', 'model-c']);
+    expect(diagnosticModelIds(catalog, 'claude')).toEqual([]);
+    expect(diagnosticModelIds({}, 'all')).toEqual([]);
+  });
+
+  test('renders an actual model dropdown with associated labels, selected model and loading state', async () => {
+    const i18n = i18next.createInstance();
+    await i18n.init({ lng: 'zh-CN', resources: { 'zh-CN': { translation: zhCN } } });
+    const render = (modelsLoading: boolean) =>
+      renderToStaticMarkup(
+        createElement(
+          I18nextProvider,
+          { i18n },
+          createElement(AuthFileDiagnosticsToolbar, {
+            filter: 'all',
+            onFilter: () => {},
+            model: modelsLoading ? '' : 'model-a',
+            models: ['model-a', 'model-b'],
+            modelsLoading,
+            onModel: () => {},
+            disabled: false,
+            canRetry: false,
+            onRetry: () => {},
+            batch: { running: false, completed: 0, total: 0, cancelled: false },
+            onCancel: () => {},
+          })
+        )
+      );
+    const markup = render(false);
+    expect(markup).not.toContain('<input');
+    expect(markup.match(/aria-haspopup="listbox"/g)).toHaveLength(2);
+    expect(markup).toContain('>model-a</span>');
+    const labels = [...markup.matchAll(/<label\b[^>]*>([\s\S]*?)<\/label>/g)];
+    expect(labels).toHaveLength(2);
+    for (const label of labels) expect(label[1]).not.toContain('<div');
+    const modelId = markup.match(/<label for="([^"]+)">测试模型<\/label>/)?.[1];
+    expect(modelId).toBeTruthy();
+    expect(markup).toContain(`id="${modelId}"`);
+    const loadingTrigger = render(true).match(/<button[^>]*aria-label="测试模型"[^>]*>/)?.[0];
+    expect(loadingTrigger).toContain('disabled=""');
+  });
+});
+
+function providerModelsHarness() {
+  const states: unknown[] = [];
+  const effects: Array<() => undefined | (() => void)> = [];
+  const notifications: unknown[][] = [];
+  const requests: Array<{
+    provider: string;
+    promise: Promise<unknown>;
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  const env = {
+    useState: (initial: unknown) => {
+      const index = states.push(initial) - 1;
+      return [
+        initial,
+        (value: unknown) => {
+          states[index] = value;
+        },
+      ];
+    },
+    useRef: (current: unknown) => ({ current }),
+    useCallback: (callback: unknown) => callback,
+    useMemo: (factory: () => unknown) => factory(),
+    useEffect: (effect: () => undefined | (() => void)) => effects.push(effect),
+    useTranslation: () => ({ t: (key: string) => key }),
+    useNotificationStore: () => ({
+      showNotification: (...args: unknown[]) => notifications.push(args),
+      showConfirmation: () => {},
+    }),
+    authFilesApi: {
+      getModelDefinitions: (provider: string) => {
+        const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+        requests.push({ provider, promise, resolve, reject });
+        return promise;
+      },
+    },
+  };
+  const source = readFileSync('src/features/authFiles/hooks/useAuthFilesOauth.tsx', 'utf8');
+  const body = source
+    .slice(source.indexOf('export function useAuthFilesOauth'))
+    .replace('export function', 'function');
+  const js = ts.transpileModule(
+    `${body}\nreturn useAuthFilesOauth({ files: [
+    { name: 'disabled.json', type: 'antigravity', disabled: true },
+    { name: 'codex.json', type: 'codex' }
+  ] });`,
+    {
+      fileName: 'hook.tsx',
+      compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
+    }
+  ).outputText;
+  new Function(...Object.keys(env), js)(...Object.values(env));
+  const cancel = effects[1]()!;
+  return {
+    requests,
+    notifications,
+    cancel,
+    get models() {
+      return states[4];
+    },
+    get loading() {
+      return states[5];
+    },
+  };
+}
 
 function diagnosticHarness() {
   const states: unknown[] = [];

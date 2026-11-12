@@ -65,21 +65,42 @@
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 12px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 14px;
-  > label {
-    flex: 1 1 200px;
-    max-width: 340px;
+  .toolbarActions > button {
+    height: 28px;
+    padding: 0 10px;
     font-size: 12px;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 340px;
+  label {
+    font-size: 12px;
+    line-height: 18px;
     color: var(--text-secondary);
   }
 }
 
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 28px;
+}
+
 .notice {
-  width: 100%;
+  flex: 0 0 100%;
   margin: 0;
   color: var(--text-tertiary);
   font-size: 12px;

@@ -5,7 +5,6 @@ import { useNotificationStore } from '@/stores';
 import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
 import type { AuthFileModelItem, OAuthConfigLoadError } from '@/features/authFiles/constants';
 import { normalizeProviderKey } from '@/features/authFiles/constants';
-type ViewMode = 'diagram' | 'list';
 
 export type UseAuthFilesOauthResult = {
   excluded: Record<string, string[]>;
@@ -13,6 +12,7 @@ export type UseAuthFilesOauthResult = {
   modelAlias: Record<string, OAuthModelAliasEntry[]>;
   modelAliasError: OAuthConfigLoadError;
   allProviderModels: Record<string, AuthFileModelItem[]>;
+  providerModelsLoading: boolean;
   providerList: string[];
   loadExcluded: () => Promise<void>;
   loadModelAlias: () => Promise<void>;
@@ -31,12 +31,11 @@ export type UseAuthFilesOauthResult = {
 };
 
 export type UseAuthFilesOauthOptions = {
-  viewMode: ViewMode;
   files: AuthFileItem[];
 };
 
 export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFilesOauthResult {
-  const { viewMode, files } = options;
+  const { files } = options;
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
 
@@ -47,6 +46,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
   const [allProviderModels, setAllProviderModels] = useState<Record<string, AuthFileModelItem[]>>(
     {}
   );
+  const [providerModelsLoading, setProviderModelsLoading] = useState(false);
 
   const excludedUnsupportedRef = useRef(false);
   const mappingsUnsupportedRef = useRef(false);
@@ -87,37 +87,36 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
   }, [files, modelAlias]);
 
   useEffect(() => {
-    if (viewMode !== 'diagram') return;
-
     let cancelled = false;
 
     const loadAllModels = async () => {
       if (providerList.length === 0) {
-        if (!cancelled) setAllProviderModels({});
+        setAllProviderModels({});
+        setProviderModelsLoading(false);
         return;
       }
 
-      const results = await Promise.all(
-        providerList.map(async (provider) => {
-          try {
-            const models = await authFilesApi.getModelDefinitions(provider);
-            return { provider, models };
-          } catch {
-            return { provider, models: [] as AuthFileModelItem[] };
-          }
-        })
+      setProviderModelsLoading(true);
+      const results = await Promise.allSettled(
+        providerList.map((provider) => authFilesApi.getModelDefinitions(provider))
       );
 
       if (cancelled) return;
 
       const nextModels: Record<string, AuthFileModelItem[]> = {};
-      results.forEach(({ provider, models }) => {
-        if (models.length > 0) {
-          nextModels[provider] = models;
+      results.forEach((result, index) => {
+        const provider = providerList[index];
+        if (result.status === 'rejected') {
+          const message =
+            result.reason instanceof Error ? result.reason.message : String(result.reason);
+          showNotification(`${t('notification.load_failed')}: ${provider} — ${message}`, 'error');
+        } else if (result.value.length > 0) {
+          nextModels[provider] = result.value;
         }
       });
 
       setAllProviderModels(nextModels);
+      setProviderModelsLoading(false);
     };
 
     void loadAllModels();
@@ -125,7 +124,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     return () => {
       cancelled = true;
     };
-  }, [providerList, viewMode]);
+  }, [providerList, showNotification, t]);
 
   const loadExcluded = useCallback(async () => {
     const requestId = ++excludedLoadRequestRef.current;
@@ -545,6 +544,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     modelAlias,
     modelAliasError,
     allProviderModels,
+    providerModelsLoading,
     providerList,
     loadExcluded,
     loadModelAlias,

@@ -1,4 +1,17 @@
 import type { AuthFileTestResult } from '@/services/api/authFiles';
+import { normalizeProviderKey } from './constants';
+
+export function diagnosticModelIds(
+  providers: Readonly<Record<string, ReadonlyArray<{ id: string }>>>,
+  provider: string
+): string[] {
+  const groups = Object.entries(providers)
+    .filter(([key]) => provider === 'all' || normalizeProviderKey(key) === provider)
+    .map(([, models]) => models);
+  return [
+    ...new Set(groups.flatMap((models) => models.map((model) => model.id.trim()).filter(Boolean))),
+  ].sort((a, b) => a.localeCompare(b));
+}
 
 export type CredentialDiagnostic = {
   result: AuthFileTestResult;
