@@ -31,6 +31,53 @@ export type AuthFileTestResult = {
   error?: string;
 };
 
+export type AuthFileCatalogModel = { id: string; disabled?: boolean };
+export type AuthFileModelCatalog = {
+  name: string;
+  auth_index: string;
+  provider: string;
+  source: 'upstream' | 'registered' | 'unknown';
+  models: AuthFileCatalogModel[];
+};
+
+export function normalizeAuthFileModelCatalogs(data: unknown): AuthFileModelCatalog[] {
+  if (!isRecord(data) || !Array.isArray(data.catalogs))
+    throw new Error('Invalid account model catalog response');
+  return data.catalogs.map((catalog: unknown) => {
+    if (
+      !isRecord(catalog) ||
+      typeof catalog.name !== 'string' ||
+      typeof catalog.auth_index !== 'string' ||
+      typeof catalog.provider !== 'string' ||
+      (catalog.source !== 'upstream' &&
+        catalog.source !== 'registered' &&
+        catalog.source !== 'unknown') ||
+      !Array.isArray(catalog.models)
+    )
+      throw new Error('Invalid account model catalog entry');
+    const models = catalog.models.map((model: unknown): AuthFileCatalogModel => {
+      if (
+        !isRecord(model) ||
+        typeof model.id !== 'string' ||
+        !model.id.trim() ||
+        (model.disabled !== undefined && typeof model.disabled !== 'boolean')
+      )
+        throw new Error('Invalid account model catalog model');
+      return {
+        id: model.id.trim(),
+        ...(typeof model.disabled === 'boolean' ? { disabled: model.disabled } : {}),
+      };
+    });
+    return {
+      name: catalog.name,
+      auth_index: catalog.auth_index,
+      provider: catalog.provider,
+      source: catalog.source,
+      models,
+    };
+  });
+}
+
 export type AuthFileFieldsPatch = {
   request_retry?: number | null;
   model_aliases?: Array<{
@@ -684,7 +731,11 @@ export const authFilesApi = {
     await updateOauthProviderMap(OAUTH_MODEL_ALIAS_ENDPOINT, normalizedChannel);
   },
 
-  // Get models supported by the credential
+  // Read saved per-account catalogs without generating requests or refreshing credentials.
+  async getModelCatalogs(): Promise<AuthFileModelCatalog[]> {
+    return normalizeAuthFileModelCatalogs(await apiClient.get('/credentials/model-catalogs'));
+  },
+
   async getModelsForAuthFile(
     name: string
   ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {

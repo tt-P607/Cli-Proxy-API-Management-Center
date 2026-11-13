@@ -67,6 +67,7 @@ import {
   type DiagnosticFilter,
 } from './diagnostics';
 import { AuthFileDiagnosticsToolbar } from './components/AuthFileDiagnosticsToolbar';
+import { AuthFileModelMatrix, AuthFileModelViewSwitch } from './components/AuthFileModelMatrix';
 import styles from './AuthFilesPage.module.scss';
 
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
@@ -96,6 +97,9 @@ export function AuthFilesPage() {
   const diagnostics = useAuthFileDiagnostics(apiClient.getConnectionRevision());
   const [diagnosticFilter, setDiagnosticFilter] = useState<DiagnosticFilter>('all');
   const [diagnosticModel, setDiagnosticModel] = useState('');
+  const [accountView, setAccountView] = useState<'cards' | 'models'>('cards');
+  const [matrixSelectedOnly, setMatrixSelectedOnly] = useState(false);
+  const [catalogRevision, setCatalogRevision] = useState(0);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const pageTransitionLayer = usePageTransitionLayer();
@@ -129,7 +133,10 @@ export function AuthFilesPage() {
   } = useAuthFilesModels();
 
   const invalidateDerivedCaches = useCallback(
-    (names?: string[]) => invalidateAuthFileDerivedCaches(invalidateModels, names),
+    (names?: string[]) => {
+      invalidateAuthFileDerivedCaches(invalidateModels, names);
+      setCatalogRevision((current) => current + 1);
+    },
     [invalidateModels]
   );
 
@@ -229,6 +236,9 @@ export function AuthFilesPage() {
 
     const persisted = readAuthFilesUiState();
     if (persisted) {
+      if (persisted.accountView === 'cards' || persisted.accountView === 'models') {
+        setAccountView(persisted.accountView);
+      }
       if (typeof persisted.filter === 'string' && persisted.filter.trim()) {
         setFilter(normalizeProviderKey(persisted.filter));
       }
@@ -282,6 +292,7 @@ export function AuthFilesPage() {
     if (!uiStateHydrated) return;
 
     writeAuthFilesUiState({
+      accountView,
       filter,
       statusFilterMode,
       problemOnly,
@@ -296,6 +307,7 @@ export function AuthFilesPage() {
     });
     writePersistedAuthFilesCompactMode(compactMode);
   }, [
+    accountView,
     compactMode,
     disabledOnly,
     filter,
@@ -385,6 +397,7 @@ export function AuthFilesPage() {
 
   const handleHeaderRefresh = useCallback(async () => {
     await Promise.all([loadFiles({ background: true }), loadExcluded(), loadModelAlias()]);
+    setCatalogRevision((current) => current + 1);
   }, [loadFiles, loadExcluded, loadModelAlias]);
 
   useHeaderRefresh(handleHeaderRefresh);
@@ -472,6 +485,7 @@ export function AuthFilesPage() {
         const matchType = normalizedFilter === 'all' || type === normalizedFilter;
         return (
           matchType &&
+          (accountView !== 'models' || !matrixSelectedOnly || selectedFiles.has(item.name)) &&
           matchesAuthFileSearch(item, normalizedSearch, wildcardSearch) &&
           matchesDiagnosticFilter(
             diagnostics.records[getAuthFileRefreshKey(item)],
@@ -480,6 +494,9 @@ export function AuthFilesPage() {
         );
       }),
     [
+      accountView,
+      matrixSelectedOnly,
+      selectedFiles,
       filesMatchingStatusFilters,
       normalizedFilter,
       normalizedSearch,
@@ -518,8 +535,11 @@ export function AuthFilesPage() {
   const start = (currentPage - 1) * pageSize;
   const pageItems = useMemo(() => sorted.slice(start, start + pageSize), [pageSize, sorted, start]);
   const selectablePageItems = useMemo(
-    () => pageItems.filter((file) => !isRuntimeOnlyAuthFile(file)),
-    [pageItems]
+    () =>
+      (accountView === 'models' ? sorted : pageItems).filter(
+        (file) => !isRuntimeOnlyAuthFile(file)
+      ),
+    [accountView, pageItems, sorted]
   );
   const selectableFilteredItems = useMemo(
     () => sorted.filter((file) => !isRuntimeOnlyAuthFile(file)),
@@ -531,16 +551,16 @@ export function AuthFilesPage() {
     const category = diagnosticCategory(diagnostics.records[getAuthFileRefreshKey(file)]);
     return !isRuntimeOnlyAuthFile(file) && category !== 'untested' && category !== 'success';
   });
-  const confirmBatchTest = (targets: typeof files) => {
+  const confirmBatchTest = (targets: typeof files, model = activeDiagnosticModel) => {
     if (disableControls || testActionsDisabled || targets.length === 0) return;
     const revision = apiClient.getConnectionRevision();
     showConfirmation({
       title: t('auth_files.diagnostic_selected'),
-      message: `${t('auth_files.diagnostic_notice')} (${targets.length})`,
+      message: `${t('auth_files.diagnostic_notice')} (${targets.length})${model ? `\n${model}` : ''}`,
       confirmText: t('auth_files.test_button'),
       onConfirm: () => {
         if (revision !== apiClient.getConnectionRevision()) return;
-        void diagnostics.startBatch(targets, activeDiagnosticModel).catch((error: unknown) => {
+        void diagnostics.startBatch(targets, model).catch((error: unknown) => {
           showNotification(error instanceof Error ? error.message : String(error), 'error');
         });
       },
@@ -712,6 +732,8 @@ export function AuthFilesPage() {
           }}
         />
 
+        <AuthFileModelViewSwitch value={accountView} onChange={setAccountView} />
+
         <AuthFilesToolbar
           search={search}
           onSearchChange={(value) => {
@@ -735,6 +757,7 @@ export function AuthFilesPage() {
             loading ||
             deletingAll ||
             files.length === 0 ||
+            (accountView === 'models' && matrixSelectedOnly) ||
             diagnosticFilter !== 'all'
           }
           deleteLoading={deletingAll}
@@ -804,7 +827,7 @@ export function AuthFilesPage() {
               </div>
             }
           />
-        ) : isNoResults ? (
+        ) : isNoResults && accountView !== 'models' ? (
           <EmptyState
             title={t('auth_files.search_empty_title')}
             description={t('auth_files.search_empty_desc')}
@@ -813,6 +836,23 @@ export function AuthFilesPage() {
                 {t('auth_files.no_results_clear')}
               </Button>
             }
+          />
+        ) : accountView === 'models' ? (
+          <AuthFileModelMatrix
+            files={sorted}
+            allFiles={files}
+            selected={selectedFiles}
+            selectedOnly={matrixSelectedOnly}
+            onSelectedOnlyChange={setMatrixSelectedOnly}
+            aliases={modelAlias}
+            records={diagnostics.records}
+            running={diagnostics.running}
+            testDisabled={disableControls || testActionsDisabled}
+            refreshRevision={catalogRevision}
+            onToggleSelect={toggleSelect}
+            onTest={(file, model) => void diagnostics.test(file, model)}
+            onBatchTest={confirmBatchTest}
+            onCopy={copyTextWithNotification}
           />
         ) : (
           <div className={gridClasses}>
@@ -849,7 +889,7 @@ export function AuthFilesPage() {
           </div>
         )}
 
-        {!loading && sorted.length > pageSize && (
+        {accountView === 'cards' && !loading && sorted.length > pageSize && (
           <div className={styles.pagination}>
             <Button
               variant="secondary"
@@ -949,9 +989,9 @@ export function AuthFilesPage() {
             files.filter((file) => selectedFiles.has(file.name) && !isRuntimeOnlyAuthFile(file))
           )
         }
-        onSelectPage={() => selectAllVisible(pageItems)}
+        onSelectPage={() => selectAllVisible(accountView === 'models' ? sorted : pageItems)}
         onSelectFiltered={() => selectAllVisible(sorted)}
-        onInvertPage={() => invertVisibleSelection(pageItems)}
+        onInvertPage={() => invertVisibleSelection(accountView === 'models' ? sorted : pageItems)}
         onDeselectAll={deselectAll}
         onDownload={() => void batchDownload(selectedNames)}
         onEnable={() => batchSetStatus(selectedNames, true)}

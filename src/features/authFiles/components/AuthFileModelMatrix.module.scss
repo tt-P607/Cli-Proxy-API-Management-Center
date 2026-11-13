@@ -1,0 +1,361 @@
+.viewSwitch {
+  display: flex;
+  align-self: flex-start;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--bg-secondary);
+
+  button {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 7px 14px;
+    font: inherit;
+    font-size: 13px;
+
+    &[aria-pressed='true'] {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px #00000012;
+      font-weight: 600;
+    }
+  }
+}
+
+.matrix {
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  padding: 16px;
+
+  > button {
+    margin-left: auto;
+    min-height: 34px;
+  }
+}
+
+.searchField {
+  flex: 1 1 240px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  input {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.notice {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.matrix > .notice {
+  padding: 0 16px 14px;
+}
+
+.summary,
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.summary {
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-variant-numeric: tabular-nums;
+
+  strong {
+    color: var(--text-primary);
+  }
+  time {
+    margin-left: auto;
+  }
+}
+
+.legend {
+  padding-block: 10px;
+}
+
+.scroll {
+  overflow: auto;
+  max-height: 65vh;
+  border-top: 1px solid var(--border-color);
+  overscroll-behavior: contain;
+}
+
+.table {
+  width: 100%;
+  border-spacing: 0;
+  border-collapse: separate;
+  font-size: 12px;
+
+  th,
+  td {
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0;
+    vertical-align: middle;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg-secondary);
+    text-align: left;
+  }
+
+  .accountHeading,
+  .accountCell {
+    position: sticky;
+    left: 0;
+    min-width: 220px;
+    max-width: 290px;
+    background: var(--bg-primary);
+    box-shadow: 2px 0 4px #00000008;
+    text-align: left;
+  }
+
+  .accountHeading {
+    z-index: 3;
+    padding: 16px;
+    background: var(--bg-secondary);
+  }
+
+  .accountCell {
+    z-index: 1;
+  }
+}
+
+.columnButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  min-width: 165px;
+  max-width: 240px;
+  min-height: 105px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+
+  code {
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+  &:hover {
+    background: var(--bg-tertiary);
+  }
+}
+
+.provider {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 400;
+}
+.coverage {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.account {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  font-weight: 400;
+
+  > input {
+    margin-top: 3px;
+    flex: 0 0 auto;
+  }
+  > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  strong {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
+}
+
+.fileName {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+.accountMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.enabledAccount {
+  color: var(--success-color);
+}
+.disabledAccount {
+  color: var(--text-tertiary);
+}
+
+.cell {
+  width: 100%;
+  min-height: 85px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  padding: 10px;
+
+  &:hover {
+    background: var(--bg-secondary);
+  }
+}
+
+.mark {
+  font-size: 20px;
+  line-height: 1.2;
+}
+.present {
+  color: var(--success-color);
+}
+.partial {
+  color: var(--warning-text);
+}
+.disabled,
+.placeholder {
+  color: var(--danger-color);
+}
+.registered {
+  color: var(--text-secondary);
+}
+.missing,
+.unregistered,
+.unknown,
+.na {
+  color: var(--text-tertiary);
+}
+.na {
+  display: block;
+  text-align: center;
+}
+.testResult {
+  font-size: 10px;
+  border-top: 1px dotted currentColor;
+  padding-top: 4px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 40px 20px;
+  font-size: 13px;
+}
+.error {
+  color: var(--danger-color);
+  padding: 16px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.variant {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+}
+.variant > code {
+  overflow-wrap: anywhere;
+}
+.alias {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .table .accountHeading,
+  .table .accountCell {
+    min-width: 145px;
+    max-width: 170px;
+  }
+  .columnButton {
+    min-width: 145px;
+  }
+  .summary time {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .controls > button {
+    margin-left: 0;
+  }
+}
